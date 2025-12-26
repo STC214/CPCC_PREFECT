@@ -15,14 +15,17 @@ START_NUM = 9000
 COMPRESS_LEVEL = zipfile.ZIP_STORED
 
 # ====================== 日志配置 ======================
+logger = logging.getLogger(__name__)
+
+
 def get_root() -> Path:
     """获取正确的根目录路径"""
     # 在模块中，我们期望工作目录已由主程序设置
     return Path(os.getcwd())
 
-logger = logging.getLogger(__name__)
-
 # ====================== 进度管理 ======================
+
+
 class ProgressManager:
     def __init__(self, total_steps=9):
         self.total_steps = total_steps
@@ -44,7 +47,8 @@ class ProgressManager:
 
     def _update_display(self):
         sys.stdout.write("\033[3A")  # 上移三行
-        sys.stdout.write(f"总进度: {self._create_bar((self.current_step-1 + self.task_progress)/self.total_steps)}\n")
+        sys.stdout.write(
+            f"总进度: {self._create_bar((self.current_step-1 + self.task_progress)/self.total_steps)}\n")
         sys.stdout.write(f"当前任务: {self._create_bar(self.task_progress)}\n")
         sys.stdout.write("\n")  # 占位行
         sys.stdout.flush()
@@ -55,16 +59,18 @@ class ProgressManager:
         return f"[{'█'*filled}{' '*(width-filled)}] {progress*100:.1f}%"
 
 # ====================== 工具函数 ======================
+
+
 def natural_sort_key(path: Path) -> list:
     """自然排序键函数"""
     return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', path.name)]
+
 
 def safe_rename(src: Path, dst: Path) -> bool:
     """安全的重命名函数"""
     try:
         if src == dst:
             return True
-        
         if dst.exists():
             # 生成唯一文件名
             counter = 1
@@ -75,7 +81,6 @@ def safe_rename(src: Path, dst: Path) -> bool:
                     dst = new_dst
                     break
                 counter += 1
-        
         src.rename(dst)
         return True
     except Exception as e:
@@ -83,6 +88,8 @@ def safe_rename(src: Path, dst: Path) -> bool:
         return False
 
 # ====================== 核心步骤实现 ======================
+
+
 def step1_convert(root: Path, progress: ProgressManager):
     """步骤1：转换非JPG图像到JPG格式"""
     convert_list = []
@@ -90,7 +97,7 @@ def step1_convert(root: Path, progress: ProgressManager):
         if path.is_file() and path.suffix.lower() in IMAGE_EXTS:
             if path.suffix.lower() not in ('.jpg', '.jpeg'):
                 convert_list.append(path)
-    
+
     total = len(convert_list)
     for idx, file in enumerate(convert_list):
         try:
@@ -102,12 +109,14 @@ def step1_convert(root: Path, progress: ProgressManager):
                 logger.info(f"Converted {file} to {new_path}")
         except Exception as e:
             logger.error(f"Failed to convert {file}: {e}")
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
+
 
 def step2_rename(root: Path, progress: ProgressManager):
     """步骤2：四位数字重命名（解决冲突问题）"""
     def process_subdir(subdir: Path):
-        files = sorted([f for f in subdir.iterdir() if f.is_file() and f.suffix.lower() == '.jpg'], key=natural_sort_key)
+        files = sorted([f for f in subdir.iterdir() if f.is_file(
+        ) and f.suffix.lower() == '.jpg'], key=natural_sort_key)
         used_numbers = set()
         for idx, file in enumerate(files):
             new_num = START_NUM + idx
@@ -119,16 +128,19 @@ def step2_rename(root: Path, progress: ProgressManager):
                 used_numbers.add(f"{new_num:04d}")
                 logger.info(f"Renamed {file} to {new_path}")
 
-    subdirs = [d for d in root.glob('*/*') if d.is_dir() and d.parent.parent == root]
+    subdirs = [d for d in root.glob(
+        '*/*') if d.is_dir() and d.parent.parent == root]
     total = len(subdirs)
     for idx, subdir in enumerate(subdirs):
         process_subdir(subdir)
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
+
 
 def step3_rename_subdirs(root: Path, progress: ProgressManager):
     """步骤3：重命名次级子目录为四位数字"""
     def process_parent(parent: Path):
-        subdirs = sorted([d for d in parent.iterdir() if d.is_dir()], key=natural_sort_key)
+        subdirs = sorted([d for d in parent.iterdir()
+                         if d.is_dir()], key=natural_sort_key)
         used_numbers = set()
         for idx, subdir in enumerate(subdirs):
             new_num = START_NUM + idx
@@ -144,7 +156,8 @@ def step3_rename_subdirs(root: Path, progress: ProgressManager):
     total = len(parent_dirs)
     for idx, parent in enumerate(parent_dirs):
         process_parent(parent)
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
+
 
 def step4_add_prefix(root: Path, progress: ProgressManager):
     """步骤4：添加目录名前缀"""
@@ -156,11 +169,13 @@ def step4_add_prefix(root: Path, progress: ProgressManager):
             if safe_rename(file, new_path):
                 logger.info(f"Added prefix {file} -> {new_path}")
 
-    subdirs = [d for d in root.rglob('*') if d.is_dir() and d.parent.parent == root]
+    subdirs = [d for d in root.rglob(
+        '*') if d.is_dir() and d.parent.parent == root]
     total = len(subdirs)
     for idx, subdir in enumerate(subdirs):
         process_subdir(subdir)
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
+
 
 def step5_move_files(root: Path, progress: ProgressManager):
     """步骤5：移动文件到父目录"""
@@ -180,11 +195,13 @@ def step5_move_files(root: Path, progress: ProgressManager):
             except Exception as e:
                 logger.error(f"Failed to move {file}: {e}")
 
-    subdirs = [d for d in root.rglob('*') if d.is_dir() and d.parent.parent == root]
+    subdirs = [d for d in root.rglob(
+        '*') if d.is_dir() and d.parent.parent == root]
     total = len(subdirs)
     for idx, subdir in enumerate(subdirs):
         process_subdir(subdir)
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
+
 
 def step6_clean_dirs(root: Path, progress: ProgressManager):
     """步骤6：删除空目录"""
@@ -197,13 +214,15 @@ def step6_clean_dirs(root: Path, progress: ProgressManager):
                 logger.info(f"Removed empty directory: {path}")
             except Exception as e:
                 logger.error(f"Failed to remove {path}: {e}")
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
+
 
 def step7_final_rename(root: Path, progress: ProgressManager):
     """步骤7：最终四位数字重命名（从0001开始）"""
     def process_dir(directory: Path):
-        files = sorted([f for f in directory.glob('*.jpg')], key=natural_sort_key)
-        
+        files = sorted([f for f in directory.glob('*.jpg')],
+                       key=natural_sort_key)
+
         # 临时重命名阶段
         temp_files = []
         for idx, file in enumerate(files):
@@ -214,7 +233,7 @@ def step7_final_rename(root: Path, progress: ProgressManager):
                 temp_files.append(temp_path)
             except Exception as e:
                 logger.error(f"临时重命名失败 {file}: {e}")
-        
+
         # 最终重命名阶段
         for idx, temp_path in enumerate(temp_files, start=1):
             target_name = f"{idx:04d}.jpg"
@@ -229,7 +248,8 @@ def step7_final_rename(root: Path, progress: ProgressManager):
     total = len(dirs)
     for idx, d in enumerate(dirs):
         process_dir(d)
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
+
 
 def step8_compress(root: Path, progress: ProgressManager):
     """步骤8：压缩子目录"""
@@ -239,6 +259,7 @@ def step8_compress(root: Path, progress: ProgressManager):
             for file in src.rglob('*'):
                 if file.is_file():
                     zf.write(file, arcname=file.relative_to(src))
+
         try:
             shutil.rmtree(src)
             logger.info(f"Compressed {src} to {zip_file}")
@@ -249,7 +270,8 @@ def step8_compress(root: Path, progress: ProgressManager):
     total = len(dirs)
     for idx, d in enumerate(dirs):
         compress_dir(d)
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
+
 
 def step9_rename_cbz(root: Path, progress: ProgressManager):
     """步骤9：重命名ZIP为CBZ"""
@@ -262,9 +284,11 @@ def step9_rename_cbz(root: Path, progress: ProgressManager):
             logger.info(f"Renamed {zip_file} to {cbz_file}")
         except Exception as e:
             logger.error(f"Failed to rename {zip_file}: {e}")
-        progress.update_task((idx+1)/total)
+        progress.update_task((idx+1)/total if total > 0 else 1.0)
 
 # ====================== 主程序 ======================
+
+
 def main():
     """主函数，执行处理流程"""
     root_dir = get_root()
@@ -282,7 +306,8 @@ def main():
     if sys.platform == "win32":
         try:
             from ctypes import windll
-            windll.kernel32.SetConsoleMode(windll.kernel32.GetStdHandle(-11), 7)
+            windll.kernel32.SetConsoleMode(
+                windll.kernel32.GetStdHandle(-11), 7)
         except Exception as e:
             logger.warning(f"设置Windows控制台模式失败: {e}")
 
@@ -291,28 +316,28 @@ def main():
     try:
         progress.step_start("转换非JPG图像")
         step1_convert(root_dir, progress)
-        
+
         progress.step_start("四位数字重命名")
         step2_rename(root_dir, progress)
-        
+
         progress.step_start("重命名次级目录")
         step3_rename_subdirs(root_dir, progress)
-        
+
         progress.step_start("添加目录名前缀")
         step4_add_prefix(root_dir, progress)
-        
+
         progress.step_start("移动文件到父目录")
         step5_move_files(root_dir, progress)
-        
+
         progress.step_start("清理空目录")
         step6_clean_dirs(root_dir, progress)
-        
+
         progress.step_start("最终文件重命名")
         step7_final_rename(root_dir, progress)
-        
+
         progress.step_start("压缩子目录")
         step8_compress(root_dir, progress)
-        
+
         progress.step_start("重命名ZIP为CBZ")
         step9_rename_cbz(root_dir, progress)
 
@@ -320,3 +345,7 @@ def main():
     except Exception as e:
         logger.critical(f"程序崩溃: {str(e)}", exc_info=True)
         print(f"\n致命错误: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
